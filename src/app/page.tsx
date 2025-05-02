@@ -157,12 +157,18 @@ export default function Home() {
 
     while (continueDiscussion && currentDiscussion.length < maxTurns + 1) { // +1 for moderator start
       try {
-        const agentRoles = 'Moderator' + agents.map(a => a.role);
+        const agentRoles = ["Moderator"].concat(agents.map(a => a.role));
+        console.log("Agent roles: ", agentRoles);
+        console.log("Agent roles length: ", agentRoles.length);
         const lastRole = currentDiscussion[currentDiscussion.length - 1].agentRole;
         const lastRoleIdx = agentRoles.indexOf(lastRole);
+        console.log("Last roles: ", lastRole);
+        console.log("Last roles idx: ", lastRoleIdx);
         const nextRoleIdx = (lastRoleIdx + 1) % agentRoles.length;
         const nextRole = agentRoles[nextRoleIdx];
 
+        console.log("Next role idx: ", nextRoleIdx);
+        console.log("Next role: ", nextRole);
         const nextMessage = await generateAgentResponse({
           topic,
           role: nextRole,
@@ -172,6 +178,7 @@ export default function Home() {
           }))
         });
 
+        console.log("Next message is: %s", nextMessage.response);
         // Handle agent skipping turn
         if (nextMessage.response.trim() === 'SKIP') {
           continue;
@@ -189,12 +196,16 @@ export default function Home() {
           break;
         }
 
-        const nextDiscussion: DiscussionMessage = {
-          agentRole: nextRole,
-          message: nextMessage.response,
-          timestamp: new Date(),
-        };
-        currentDiscussion.push(nextDiscussion)
+        // Moderator will only check if the discussion can be concluded. It won't participate in the discussion
+        if(nextRole.toLowerCase() === 'moderator') {
+            const nextDiscussion: DiscussionMessage = {
+              agentRole: nextRole,
+              message: nextMessage.response,
+              timestamp: new Date(),
+            };
+            currentDiscussion.push(nextDiscussion)
+            setDiscussion([...currentDiscussion]);
+        }
       } catch (error) {
         console.error("Error during discussion step:", error);
         toast({
