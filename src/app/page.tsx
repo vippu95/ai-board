@@ -12,6 +12,7 @@ import { Loader2, User, Bot, Sparkles, Edit } from 'lucide-react';
 import { determineAgentRoles, DetermineAgentRolesInput, DetermineAgentRolesOutput } from '@/ai/flows/determine-agent-roles';
 import { summarizeMeetingConclusion, SummarizeMeetingConclusionInput, SummarizeMeetingConclusionOutput } from '@/ai/flows/summarize-meeting-conclusion';
 import ReactMarkdown from 'react-markdown';
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 type Agent = {
   id: string;
@@ -77,18 +78,22 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [editingRoles, setEditingRoles] = useState<boolean>(false);
   const [editedRoles, setEditedRoles] = useState<string[]>([]);
+  const { toast } = useToast(); // Initialize useToast
 
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
 
    React.useEffect(() => {
     // Scroll to bottom when discussion updates
     if (scrollAreaRef.current) {
+      // The ShadCN ScrollArea component nests the scrollable viewport.
+      // We need to query for the viewport element within the ref.
       const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (scrollElement) {
         scrollElement.scrollTop = scrollElement.scrollHeight;
       }
     }
   }, [discussion]);
+
 
   const handleTopicSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +110,16 @@ export default function Home() {
       const input: DetermineAgentRolesInput = { topic };
       const roles: DetermineAgentRolesOutput = await determineAgentRoles(input);
 
+      if (!roles || roles.length === 0) {
+        toast({
+            title: "Role Generation Failed",
+            description: "Could not determine agent roles. Please try a different topic.",
+            variant: "destructive",
+        });
+         setAppState('idle');
+         return;
+      }
+
       const initialAgents = roles.map((role, index) => ({
         id: `agent-${index}`,
         role: role,
@@ -114,8 +129,12 @@ export default function Home() {
       setEditedRoles(roles); // Initialize edited roles
     } catch (error) {
       console.error("Error determining agent roles:", error);
+      toast({
+        title: "Error",
+        description: "Failed to determine agent roles. Please try again.",
+        variant: "destructive",
+      });
       setAppState('idle');
-      // Add user-facing error handling (e.g., toast notification)
     } finally {
       setIsLoading(false);
     }
@@ -135,6 +154,10 @@ export default function Home() {
       }));
       setAgents(updatedAgents);
       setEditingRoles(false);
+      toast({
+        title: "Roles Updated",
+        description: "Agent roles have been saved.",
+      })
   }
 
   const startDiscussion = async () => {
@@ -180,8 +203,12 @@ export default function Home() {
 
       } catch (error) {
         console.error("Error during discussion step:", error);
+         toast({
+            title: "Discussion Error",
+            description: "An error occurred during the discussion.",
+            variant: "destructive",
+        });
         continueDiscussion = false; // Stop on error
-        // Add user-facing error handling
       }
     }
 
@@ -200,7 +227,11 @@ export default function Home() {
      } catch (error) {
         console.error("Error generating conclusion:", error);
         setConclusion("Error generating conclusion.");
-        // Add user-facing error handling
+        toast({
+            title: "Conclusion Error",
+            description: "Failed to generate the meeting conclusion.",
+            variant: "destructive",
+        });
      } finally {
         setIsLoading(false);
         setAppState('finished');
@@ -224,7 +255,7 @@ export default function Home() {
       <div className="flex flex-1 gap-4 overflow-hidden">
 
         {/* Left Panel: Setup & Conclusion */}
-        <div className="w-1/3 flex flex-col gap-4">
+        <div className="w-1/3 flex flex-col gap-4 overflow-hidden"> {/* Added overflow-hidden */}
           <Card className="flex-shrink-0">
             <CardHeader>
               <CardTitle>1. Start a New Discussion</CardTitle>
@@ -253,7 +284,7 @@ export default function Home() {
           </Card>
 
           {appState !== 'idle' && agents.length > 0 && (
-             <Card className="flex-shrink-0">
+             <Card className="flex-shrink-0 flex flex-col overflow-hidden"> {/* Added flex flex-col overflow-hidden */}
                 <CardHeader>
                     <div className="flex justify-between items-center">
                         <CardTitle>2. Discussion Plan</CardTitle>
@@ -265,37 +296,41 @@ export default function Home() {
                     </div>
                     <CardDescription>The moderator proposed these roles. You can edit them before starting.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                    {editingRoles ? (
-                         editedRoles.map((role, index) => (
-                            <div key={`edit-${index}`} className="flex items-center gap-2">
-                                <Input
-                                    value={role}
-                                    onChange={(e) => handleRoleChange(index, e.target.value)}
-                                    className="flex-grow"
-                                    disabled={isLoading}
-                                />
-                                {/* Potential: Add remove button */}
+                <CardContent className="flex-1 overflow-hidden p-0"> {/* Added flex-1 overflow-hidden p-0 */}
+                   <ScrollArea className="h-full max-h-[250px] p-6"> {/* Added ScrollArea with max-height */}
+                    <div className="space-y-2"> {/* Added wrapper div */}
+                        {editingRoles ? (
+                            editedRoles.map((role, index) => (
+                                <div key={`edit-${index}`} className="flex items-center gap-2">
+                                    <Input
+                                        value={role}
+                                        onChange={(e) => handleRoleChange(index, e.target.value)}
+                                        className="flex-grow"
+                                        disabled={isLoading}
+                                    />
+                                    {/* Potential: Add remove button */}
+                                </div>
+                            ))
+                        ) : (
+                            agents.map((agent) => {
+                                const Icon = agent.icon || roleIcons.default;
+                                return (
+                                <div key={agent.id} className="flex items-center gap-2 p-2 rounded-md bg-secondary">
+                                    <Icon className="h-5 w-5 text-primary" />
+                                    <span className="font-medium">{agent.role}</span>
+                                </div>
+                                );
+                            })
+                        )}
+                        {editingRoles && (
+                            <div className="flex justify-end gap-2 pt-2">
+                                {/* Potential: Add "Add Role" button */}
+                                <Button variant="outline" onClick={() => { setEditingRoles(false); setEditedRoles(agents.map(a => a.role)); }} disabled={isLoading}>Cancel</Button>
+                                <Button onClick={saveEditedRoles} disabled={isLoading}>Save Roles</Button>
                             </div>
-                        ))
-                    ) : (
-                         agents.map((agent) => {
-                            const Icon = agent.icon || roleIcons.default;
-                            return (
-                            <div key={agent.id} className="flex items-center gap-2 p-2 rounded-md bg-secondary">
-                                <Icon className="h-5 w-5 text-primary" />
-                                <span className="font-medium">{agent.role}</span>
-                            </div>
-                            );
-                        })
-                    )}
-                    {editingRoles && (
-                        <div className="flex justify-end gap-2 pt-2">
-                             {/* Potential: Add "Add Role" button */}
-                            <Button variant="outline" onClick={() => { setEditingRoles(false); setEditedRoles(agents.map(a => a.role)); }} disabled={isLoading}>Cancel</Button>
-                            <Button onClick={saveEditedRoles} disabled={isLoading}>Save Roles</Button>
-                        </div>
-                    )}
+                        )}
+                    </div> {/* Close wrapper div */}
+                   </ScrollArea> {/* Close ScrollArea */}
                 </CardContent>
                  {!editingRoles && appState === 'planning' && (
                     <CardFooter>
@@ -309,23 +344,25 @@ export default function Home() {
           )}
 
           {(appState === 'concluding' || appState === 'finished') && (
-            <Card className="flex-1 flex flex-col">
+            <Card className="flex-1 flex flex-col overflow-hidden"> {/* Ensure conclusion card also handles overflow */}
               <CardHeader>
                 <CardTitle>3. Meeting Conclusion</CardTitle>
               </CardHeader>
-              <CardContent className="flex-1 overflow-auto">
-                {isLoading && appState === 'concluding' ? (
-                   <div className="flex items-center justify-center h-full">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        <span className="ml-2">Generating conclusion...</span>
-                    </div>
-                ) : (
-                    conclusion ? (
-                        <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert">{conclusion}</ReactMarkdown>
+              <CardContent className="flex-1 overflow-auto p-0"> {/* Use overflow-auto directly or wrap with ScrollArea */}
+                <ScrollArea className="h-full p-6">
+                    {isLoading && appState === 'concluding' ? (
+                    <div className="flex items-center justify-center h-full">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <span className="ml-2">Generating conclusion...</span>
+                        </div>
                     ) : (
-                        <p className="text-muted-foreground">The conclusion will appear here.</p>
-                    )
-                )}
+                        conclusion ? (
+                            <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert">{conclusion}</ReactMarkdown>
+                        ) : (
+                            <p className="text-muted-foreground">The conclusion will appear here.</p>
+                        )
+                    )}
+                </ScrollArea>
               </CardContent>
                {appState === 'finished' && (
                     <CardFooter>
@@ -351,7 +388,9 @@ export default function Home() {
             <CardTitle>Live Discussion</CardTitle>
             <CardDescription>Watch the AI agents discuss the topic in real-time.</CardDescription>
           </CardHeader>
+          {/* The ref is now correctly on the CardContent which contains the ScrollArea */}
           <CardContent ref={scrollAreaRef} className="flex-1 overflow-hidden p-0">
+              {/* ScrollArea now correctly takes the full height of its parent (CardContent) */}
               <ScrollArea className="h-full p-6">
                 {discussion.length === 0 && appState !== 'discussing' && appState !== 'concluding' && (
                     <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
