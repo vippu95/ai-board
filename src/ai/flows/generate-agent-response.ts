@@ -35,7 +35,13 @@ const prompt = ai.definePrompt({
   - {{this.role}}: {{this.response}}
   {{/each}}
 
-  Based on your role, the topic, and the history, provide your next contribution to the discussion. Keep your response relevant.`,
+  Your task:
+  - Focus on the most critical, controversial, or challenging points related to the topic.
+  - Avoid superficial or repetitive comments.
+  - If you have nothing substantial to add this turn, reply with exactly: SKIP
+  - If you are the Moderator and you believe the discussion has reached a natural conclusion, reply with exactly: CONCLUDE
+
+  Based on your role, the topic, and the history, provide your next contribution to the discussion. Keep your response relevant and impactful.`,
 });
 
 // Define the Genkit flow

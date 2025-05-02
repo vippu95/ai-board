@@ -31,13 +31,13 @@ type AppState = 'idle' | 'planning' | 'discussing' | 'concluding' | 'finished';
 
 // Basic mapping, could be expanded
 const roleIcons: { [key: string]: React.ComponentType<{ className?: string }> } = {
-    default: Bot, // Default icon
-    moderator: Sparkles,
-    user: User,
-    analyst: Bot,
-    strategist: Bot,
-    critic: Bot,
-    ethicist: Bot,
+  default: Bot, // Default icon
+  moderator: Sparkles,
+  user: User,
+  analyst: Bot,
+  strategist: Bot,
+  critic: Bot,
+  ethicist: Bot,
 };
 
 
@@ -54,7 +54,7 @@ export default function Home() {
 
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
 
-   React.useEffect(() => {
+  React.useEffect(() => {
     // Scroll to bottom when discussion updates or conclusion is added
     if (scrollAreaRef.current) {
       const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
@@ -85,12 +85,12 @@ export default function Home() {
 
       if (!roles || roles.length === 0) {
         toast({
-            title: "Role Generation Failed",
-            description: "Could not determine agent roles. Please try a different topic.",
-            variant: "destructive",
+          title: "Role Generation Failed",
+          description: "Could not determine agent roles. Please try a different topic.",
+          variant: "destructive",
         });
-         setAppState('idle');
-         return;
+        setAppState('idle');
+        return;
       }
 
       const initialAgents = roles.map((role, index) => ({
@@ -120,17 +120,17 @@ export default function Home() {
   };
 
   const saveEditedRoles = () => {
-      const updatedAgents = editedRoles.map((role, index) => ({
-        id: `agent-${index}`,
-        role: role,
-        icon: roleIcons[role.toLowerCase()] || roleIcons.default,
-      }));
-      setAgents(updatedAgents);
-      setEditingRoles(false);
-      toast({
-        title: "Roles Updated",
-        description: "Agent roles have been saved.",
-      })
+    const updatedAgents = editedRoles.map((role, index) => ({
+      id: `agent-${index}`,
+      role: role,
+      icon: roleIcons[role.toLowerCase()] || roleIcons.default,
+    }));
+    setAgents(updatedAgents);
+    setEditingRoles(false);
+    toast({
+      title: "Roles Updated",
+      description: "Agent roles have been saved.",
+    })
   }
 
   const startDiscussion = async () => {
@@ -143,7 +143,7 @@ export default function Home() {
 
     let currentDiscussion: DiscussionMessage[] = [];
     let continueDiscussion = true;
-    const maxTurns = 50; // Limit discussion length for now
+    const maxTurns = 14; // Limit discussion length for now
 
     // Initial Moderator message
     const moderatorMessage: DiscussionMessage = {
@@ -157,15 +157,12 @@ export default function Home() {
 
     while (continueDiscussion && currentDiscussion.length < maxTurns + 1) { // +1 for moderator start
       try {
-        const agentRoles = agents.map(a => a.role);
-
-        const lastRole = currentDiscussion[currentDiscussion.length - 1].agentRole
+        const agentRoles = 'Moderator' + agents.map(a => a.role);
+        const lastRole = currentDiscussion[currentDiscussion.length - 1].agentRole;
         const lastRoleIdx = agentRoles.indexOf(lastRole);
-        const lastMessage = currentDiscussion[currentDiscussion.length - 1];
-      
         const nextRoleIdx = (lastRoleIdx + 1) % agentRoles.length;
         const nextRole = agentRoles[nextRoleIdx];
-      
+
         const nextMessage = await generateAgentResponse({
           topic,
           role: nextRole,
@@ -175,34 +172,35 @@ export default function Home() {
           }))
         });
 
+        // Handle agent skipping turn
+        if (nextMessage.response.trim() === 'SKIP') {
+          continue;
+        }
+
+        // If moderator says CONCLUDE, end discussion
+        if ((nextRole.toLowerCase() === 'moderator' && nextMessage.response.trim() === 'CONCLUDE') || (currentDiscussion.length >= maxTurns + 1)) {
+          const concludingModeratorMessage: DiscussionMessage = {
+            agentRole: 'Moderator',
+            message: "Thank you all for your contributions. I will now summarize the key points and conclusion.",
+            timestamp: new Date(),
+          };
+          currentDiscussion.push(concludingModeratorMessage);
+          setDiscussion([...currentDiscussion]);
+          break;
+        }
+
         const nextDiscussion: DiscussionMessage = {
           agentRole: nextRole,
           message: nextMessage.response,
           timestamp: new Date(),
         };
-        currentDiscussion.push(nextDiscussion);
-        setDiscussion([...currentDiscussion]);
-
-        // Simple condition to stop discussion (replace with GenAI decision later)
-        if (currentDiscussion.length >= maxTurns + 1) {
-            continueDiscussion = false;
-            // Add moderator concluding message
-            const concludingModeratorMessage: DiscussionMessage = {
-                agentRole: 'Moderator',
-                message: "Thank you all for your contributions. I will now summarize the key points and conclusion.",
-                timestamp: new Date(),
-            };
-            currentDiscussion.push(concludingModeratorMessage);
-            setDiscussion([...currentDiscussion]);
-        }
-
+        currentDiscussion.push(nextDiscussion)
       } catch (error) {
         console.error("Error during discussion step:", error);
-         toast({
-            title: "Discussion Error",
-            description: "An error occurred during the discussion.",
-            variant: "destructive",
-
+        toast({
+          title: "Discussion Error",
+          description: "An error occurred during the discussion.",
+          variant: "destructive",
         });
         continueDiscussion = false; // Stop on error
       }
@@ -211,49 +209,47 @@ export default function Home() {
     setAppState('concluding');
     // No longer set loading false here, it will be set in generateConclusion
     await generateConclusion(currentDiscussion);
-    // setIsLoading(false); // Moved to generateConclusion finally block
   };
 
   const generateConclusion = async (finalDiscussion: DiscussionMessage[]) => {
-     // setIsLoading is already true from startDiscussion or if called separately
-     setIsLoading(true); // Ensure loading is true
-     try {
-        const transcript = finalDiscussion.map(msg => `${msg.agentRole}: ${msg.message}`).join('\n\n');
-        const input: SummarizeMeetingConclusionInput = { transcript };
-        const result: SummarizeMeetingConclusionOutput = await summarizeMeetingConclusion(input);
-        setConclusion(result.conclusion);
-        setAppState('finished'); // Move state change here
-     } catch (error) {
-        console.error("Error generating conclusion:", error);
-        setConclusion("Error generating conclusion.");
-        toast({
-            title: "Conclusion Error",
-            description: "Failed to generate the meeting conclusion.",
-            variant: "destructive",
-        });
-        setAppState('finished'); // Also set finished on error
-     } finally {
-        setIsLoading(false);
-        // setAppState('finished'); // Moved to try/catch blocks
-     }
+    // setIsLoading is already true from startDiscussion or if called separately
+    setIsLoading(true); // Ensure loading is true
+    try {
+      const transcript = finalDiscussion.map(msg => `${msg.agentRole}: ${msg.message}`).join('\n\n');
+      const input: SummarizeMeetingConclusionInput = { transcript };
+      const result: SummarizeMeetingConclusionOutput = await summarizeMeetingConclusion(input);
+      setConclusion(result.conclusion);
+      setAppState('finished'); // Move state change here
+    } catch (error) {
+      console.error("Error generating conclusion:", error);
+      setConclusion("Error generating conclusion.");
+      toast({
+        title: "Conclusion Error",
+        description: "Failed to generate the meeting conclusion.",
+        variant: "destructive",
+      });
+      setAppState('finished'); // Also set finished on error
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   const getAgentIcon = (role: string) => {
-     const normalizedRole = role.toLowerCase();
-     if (normalizedRole === 'moderator') return Sparkles;
-     const agent = agents.find(a => a.role.toLowerCase() === normalizedRole);
-     return agent?.icon || roleIcons.default;
+    const normalizedRole = role.toLowerCase();
+    if (normalizedRole === 'moderator') return Sparkles;
+    const agent = agents.find(a => a.role.toLowerCase() === normalizedRole);
+    return agent?.icon || roleIcons.default;
   }
 
   const resetApp = () => {
-      setAppState('idle');
-      setTopic('');
-      setAgents([]);
-      setDiscussion([]);
-      setConclusion('');
-      setEditingRoles(false);
-      setEditedRoles([]);
-      setIsLoading(false); // Ensure loading is reset
+    setAppState('idle');
+    setTopic('');
+    setAgents([]);
+    setDiscussion([]);
+    setConclusion('');
+    setEditingRoles(false);
+    setEditedRoles([]);
+    setIsLoading(false); // Ensure loading is reset
   }
 
   return (
@@ -287,95 +283,95 @@ export default function Home() {
               </form>
             </CardContent>
             <CardFooter>
-               {appState === 'idle' || appState === 'finished' ? (
-                 <Button onClick={appState === 'finished' ? resetApp : handleTopicSubmit} disabled={!topic && appState === 'idle'} className="w-full">
-                    {appState === 'finished' ? 'Start New Topic' : 'Define Agent Roles'}
-                 </Button>
-               ) : (
-                 <Button disabled={true} className="w-full">
-                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                   Generating Roles...
-                 </Button>
-               )}
+              {appState === 'idle' || appState === 'finished' ? (
+                <Button onClick={appState === 'finished' ? resetApp : handleTopicSubmit} disabled={!topic && appState === 'idle'} className="w-full">
+                  {appState === 'finished' ? 'Start New Topic' : 'Define Agent Roles'}
+                </Button>
+              ) : (
+                <Button disabled={true} className="w-full">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating Roles...
+                </Button>
+              )}
             </CardFooter>
           </Card>
 
           {/* Discussion Plan Card - Shown only during 'planning' state and onwards until reset */}
           {(appState === 'planning' || appState === 'discussing' || appState === 'concluding' || appState === 'finished') && agents.length > 0 && (
-             <Card className="flex-shrink-0 flex flex-col overflow-hidden"> {/* Added flex flex-col overflow-hidden */}
-                <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <CardTitle>2. Discussion Plan</CardTitle>
-                        {!editingRoles && appState === 'planning' && (
-                            <Button variant="ghost" size="sm" onClick={() => setEditingRoles(true)} disabled={isLoading}>
-                                <Edit className="mr-2 h-4 w-4" /> Edit Roles
-                            </Button>
-                        )}
-                    </div>
-                    <CardDescription>
-                       {appState === 'planning' ? 'The moderator proposed these roles. You can edit them before starting.' : 'The participating agent roles.'}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1 overflow-hidden p-0"> {/* Added flex-1 overflow-hidden p-0 */}
-                   <ScrollArea className="h-full max-h-[250px] p-6"> {/* Added ScrollArea with max-height */}
-                    <div className="space-y-2"> {/* Added wrapper div */}
-                        {editingRoles ? (
-                            editedRoles.map((role, index) => (
-                                <div key={`edit-${index}`} className="flex items-center gap-2">
-                                    <Input
-                                        value={role}
-                                        onChange={(e) => handleRoleChange(index, e.target.value)}
-                                        className="flex-grow"
-                                        disabled={isLoading || appState !== 'planning'}
-                                    />
-                                    {/* Potential: Add remove button */}
-                                </div>
-                            ))
-                        ) : (
-                            agents.map((agent) => {
-                                const Icon = agent.icon || roleIcons.default;
-                                return (
-                                <div key={agent.id} className="flex items-center gap-2 p-2 rounded-md bg-secondary">
-                                    <Icon className="h-5 w-5 text-primary" />
-                                    <span className="font-medium">{agent.role}</span>
-                                </div>
-                                );
-                            })
-                        )}
-                        {editingRoles && (
-                            <div className="flex justify-end gap-2 pt-2">
-                                {/* Potential: Add "Add Role" button */}
-                                <Button variant="outline" onClick={() => { setEditingRoles(false); setEditedRoles(agents.map(a => a.role)); }} disabled={isLoading}>Cancel</Button>
-                                <Button onClick={saveEditedRoles} disabled={isLoading}>Save Roles</Button>
-                            </div>
-                        )}
-                    </div> {/* Close wrapper div */}
-                   </ScrollArea> {/* Close ScrollArea */}
-                </CardContent>
-                 {/* Show Start/Running/Finished Button */}
-                 {appState === 'planning' && !editingRoles && (
-                    <CardFooter>
-                        <Button onClick={startDiscussion} disabled={isLoading || agents.length === 0} className="w-full">
-                            Start Board Meeting
-                        </Button>
-                    </CardFooter>
-                 )}
-                 {(appState === 'discussing' || appState === 'concluding') && (
-                    <CardFooter>
-                        <Button disabled={true} className="w-full">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            {appState === 'discussing' ? 'Discussion in Progress...' : 'Generating Conclusion...'}
-                        </Button>
-                    </CardFooter>
-                 )}
-                 {appState === 'finished' && (
-                     <CardFooter>
-                         <Button variant="outline" onClick={resetApp} className="w-full">
-                             Start New Topic
-                         </Button>
-                     </CardFooter>
-                 )}
-             </Card>
+            <Card className="flex-shrink-0 flex flex-col overflow-hidden"> {/* Added flex flex-col overflow-hidden */}
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>2. Discussion Plan</CardTitle>
+                  {!editingRoles && appState === 'planning' && (
+                    <Button variant="ghost" size="sm" onClick={() => setEditingRoles(true)} disabled={isLoading}>
+                      <Edit className="mr-2 h-4 w-4" /> Edit Roles
+                    </Button>
+                  )}
+                </div>
+                <CardDescription>
+                  {appState === 'planning' ? 'The moderator proposed these roles. You can edit them before starting.' : 'The participating agent roles.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-hidden p-0"> {/* Added flex-1 overflow-hidden p-0 */}
+                <ScrollArea className="h-full max-h-[250px] p-6"> {/* Added ScrollArea with max-height */}
+                  <div className="space-y-2"> {/* Added wrapper div */}
+                    {editingRoles ? (
+                      editedRoles.map((role, index) => (
+                        <div key={`edit-${index}`} className="flex items-center gap-2">
+                          <Input
+                            value={role}
+                            onChange={(e) => handleRoleChange(index, e.target.value)}
+                            className="flex-grow"
+                            disabled={isLoading || appState !== 'planning'}
+                          />
+                          {/* Potential: Add remove button */}
+                        </div>
+                      ))
+                    ) : (
+                      agents.map((agent) => {
+                        const Icon = agent.icon || roleIcons.default;
+                        return (
+                          <div key={agent.id} className="flex items-center gap-2 p-2 rounded-md bg-secondary">
+                            <Icon className="h-5 w-5 text-primary" />
+                            <span className="font-medium">{agent.role}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                    {editingRoles && (
+                      <div className="flex justify-end gap-2 pt-2">
+                        {/* Potential: Add "Add Role" button */}
+                        <Button variant="outline" onClick={() => { setEditingRoles(false); setEditedRoles(agents.map(a => a.role)); }} disabled={isLoading}>Cancel</Button>
+                        <Button onClick={saveEditedRoles} disabled={isLoading}>Save Roles</Button>
+                      </div>
+                    )}
+                  </div> {/* Close wrapper div */}
+                </ScrollArea> {/* Close ScrollArea */}
+              </CardContent>
+              {/* Show Start/Running/Finished Button */}
+              {appState === 'planning' && !editingRoles && (
+                <CardFooter>
+                  <Button onClick={startDiscussion} disabled={isLoading || agents.length === 0} className="w-full">
+                    Start Board Meeting
+                  </Button>
+                </CardFooter>
+              )}
+              {(appState === 'discussing' || appState === 'concluding') && (
+                <CardFooter>
+                  <Button disabled={true} className="w-full">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {appState === 'discussing' ? 'Discussion in Progress...' : 'Generating Conclusion...'}
+                  </Button>
+                </CardFooter>
+              )}
+              {appState === 'finished' && (
+                <CardFooter>
+                  <Button variant="outline" onClick={resetApp} className="w-full">
+                    Start New Topic
+                  </Button>
+                </CardFooter>
+              )}
+            </Card>
           )}
 
           {/* Removed the separate Conclusion Card */}
@@ -387,83 +383,83 @@ export default function Home() {
           <CardHeader>
             <CardTitle>Live Discussion & Conclusion</CardTitle>
             <CardDescription>
-                {appState === 'idle' && 'Start a topic to see the discussion.'}
-                {appState === 'planning' && 'Review roles and start the meeting.'}
-                {(appState === 'discussing' || appState === 'concluding') && 'Watch the AI agents discuss the topic in real-time.'}
-                {appState === 'finished' && 'The meeting discussion and conclusion.'}
+              {appState === 'idle' && 'Start a topic to see the discussion.'}
+              {appState === 'planning' && 'Review roles and start the meeting.'}
+              {(appState === 'discussing' || appState === 'concluding') && 'Watch the AI agents discuss the topic in real-time.'}
+              {appState === 'finished' && 'The meeting discussion and conclusion.'}
             </CardDescription>
           </CardHeader>
           {/* The ref is now correctly on the CardContent which contains the ScrollArea */}
           <CardContent ref={scrollAreaRef} className="flex-1 overflow-hidden p-0">
-              {/* ScrollArea now correctly takes the full height of its parent (CardContent) */}
-              <ScrollArea className="h-full p-6">
-                {discussion.length === 0 && !conclusion && appState !== 'discussing' && appState !== 'concluding' && (
-                    <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-                        <Bot size={48} className="mb-4"/>
-                        {appState === 'idle' && <p>Enter a topic and click "Define Agent Roles" to begin.</p>}
-                        {appState === 'planning' && <p>Review the agent roles and click "Start Board Meeting".</p>}
-                        {appState !== 'idle' && appState !== 'planning' && <p>The discussion will appear here once started.</p>}
-                    </div>
-                )}
-                <div className="space-y-4">
-                    {discussion.map((msg, index) => {
-                        const Icon = getAgentIcon(msg.agentRole);
-                        const isUserOrModerator = msg.agentRole === 'User' || msg.agentRole === 'Moderator';
-                        const bgColor = msg.agentRole === 'Moderator' ? 'bg-primary/10' : 'bg-secondary';
-                        const borderColor = msg.agentRole === 'Moderator' ? 'border-primary/30' : 'border-border';
-                        const textColor = msg.agentRole === 'Moderator' ? 'text-primary' : 'text-foreground';
-                        // Highlight only the very last message during discussion phase
-                        const isHighlighted = appState === 'discussing' && index === discussion.length - 1;
-
-                        return (
-                            <div
-                            key={`msg-${index}`}
-                            className={`flex gap-3 p-3 rounded-lg border ${bgColor} ${borderColor} ${isHighlighted ? 'ring-2 ring-accent' : ''}`}
-                            >
-                            <Icon className={`h-6 w-6 mt-1 flex-shrink-0 ${textColor}`} />
-                            <div className="flex-1">
-                                <p className={`font-semibold ${textColor}`}>{msg.agentRole}</p>
-                                <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert text-foreground">
-                                    {msg.message}
-                                </ReactMarkdown>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                {msg.timestamp.toLocaleTimeString()}
-                                </p>
-                            </div>
-                            </div>
-                        );
-                    })}
-
-                    {/* Loading indicator during discussion or conclusion generation */}
-                    {isLoading && (appState === 'discussing' || appState === 'concluding') && (
-                         <div className="flex items-center text-muted-foreground justify-center p-4">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            <span>{appState === 'discussing' ? 'Agent thinking...' : 'Generating conclusion...'}</span>
-                        </div>
-                    )}
-
-                    {/* Display Conclusion */}
-                    {appState === 'finished' && conclusion && (
-                        <div className="mt-6 pt-4 border-t border-dashed">
-                             <h3 className="text-lg font-semibold mb-2 text-primary flex items-center gap-2">
-                                <Sparkles className="h-5 w-5" /> Meeting Conclusion
-                             </h3>
-                             <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert bg-card p-4 rounded-md border">
-                                {conclusion}
-                             </ReactMarkdown>
-                        </div>
-                    )}
-                     {appState === 'finished' && !conclusion && (
-                        <div className="mt-6 pt-4 border-t border-dashed text-center text-destructive">
-                            Failed to generate conclusion.
-                        </div>
-                     )}
+            {/* ScrollArea now correctly takes the full height of its parent (CardContent) */}
+            <ScrollArea className="h-full p-6">
+              {discussion.length === 0 && !conclusion && appState !== 'discussing' && appState !== 'concluding' && (
+                <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+                  <Bot size={48} className="mb-4" />
+                  {appState === 'idle' && <p>Enter a topic and click "Define Agent Roles" to begin.</p>}
+                  {appState === 'planning' && <p>Review the agent roles and click "Start Board Meeting".</p>}
+                  {appState !== 'idle' && appState !== 'planning' && <p>The discussion will appear here once started.</p>}
                 </div>
+              )}
+              <div className="space-y-4">
+                {discussion.map((msg, index) => {
+                  const Icon = getAgentIcon(msg.agentRole);
+                  const isUserOrModerator = msg.agentRole === 'User' || msg.agentRole === 'Moderator';
+                  const bgColor = msg.agentRole === 'Moderator' ? 'bg-primary/10' : 'bg-secondary';
+                  const borderColor = msg.agentRole === 'Moderator' ? 'border-primary/30' : 'border-border';
+                  const textColor = msg.agentRole === 'Moderator' ? 'text-primary' : 'text-foreground';
+                  // Highlight only the very last message during discussion phase
+                  const isHighlighted = appState === 'discussing' && index === discussion.length - 1;
 
-              </ScrollArea>
+                  return (
+                    <div
+                      key={`msg-${index}`}
+                      className={`flex gap-3 p-3 rounded-lg border ${bgColor} ${borderColor} ${isHighlighted ? 'ring-2 ring-accent' : ''}`}
+                    >
+                      <Icon className={`h-6 w-6 mt-1 flex-shrink-0 ${textColor}`} />
+                      <div className="flex-1">
+                        <p className={`font-semibold ${textColor}`}>{msg.agentRole}</p>
+                        <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert text-foreground">
+                          {msg.message}
+                        </ReactMarkdown>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {msg.timestamp.toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Loading indicator during discussion or conclusion generation */}
+                {isLoading && (appState === 'discussing' || appState === 'concluding') && (
+                  <div className="flex items-center text-muted-foreground justify-center p-4">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>{appState === 'discussing' ? 'Agent thinking...' : 'Generating conclusion...'}</span>
+                  </div>
+                )}
+
+                {/* Display Conclusion */}
+                {appState === 'finished' && conclusion && (
+                  <div className="mt-6 pt-4 border-t border-dashed">
+                    <h3 className="text-lg font-semibold mb-2 text-primary flex items-center gap-2">
+                      <Sparkles className="h-5 w-5" /> Meeting Conclusion
+                    </h3>
+                    <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert bg-card p-4 rounded-md border">
+                      {conclusion}
+                    </ReactMarkdown>
+                  </div>
+                )}
+                {appState === 'finished' && !conclusion && (
+                  <div className="mt-6 pt-4 border-t border-dashed text-center text-destructive">
+                    Failed to generate conclusion.
+                  </div>
+                )}
+              </div>
+
+            </ScrollArea>
           </CardContent>
-            {/* Footer with reset button only needed if discussion panel is the only place to restart */}
-           {/*
+          {/* Footer with reset button only needed if discussion panel is the only place to restart */}
+          {/*
             {appState === 'finished' && (
                 <CardFooter className="border-t pt-4">
                      <Button variant="outline" onClick={resetApp} className="w-full">
