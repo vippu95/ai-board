@@ -40,6 +40,7 @@ const prompt = ai.definePrompt({
   - Avoid superficial or repetitive comments.
   - If you have nothing substantial to add this turn, reply with exactly: SKIP
   - If you are the Moderator and you believe the discussion has reached a natural conclusion, reply with exactly: CONCLUDE
+  - If you are the Moderator and you believe the discussion should continue, reply with exactly: CONTINUE
 
   Based on your role, the topic, and the history, provide your next contribution to the discussion. Keep your response relevant and impactful.`,
 });

@@ -154,38 +154,39 @@ export default function Home() {
     currentDiscussion.push(moderatorMessage);
     setDiscussion([...currentDiscussion]);
 
+    const agentRoles = ["Moderator"].concat(agents.map(a => a.role));
+    let lastRoleIdx = 0;
 
     while (continueDiscussion && currentDiscussion.length < maxTurns + 1) { // +1 for moderator start
       try {
-        const agentRoles = ["Moderator"].concat(agents.map(a => a.role));
-        console.log("Agent roles: ", agentRoles);
-        console.log("Agent roles length: ", agentRoles.length);
-        const lastRole = currentDiscussion[currentDiscussion.length - 1].agentRole;
-        const lastRoleIdx = agentRoles.indexOf(lastRole);
-        console.log("Last roles: ", lastRole);
-        console.log("Last roles idx: ", lastRoleIdx);
-        const nextRoleIdx = (lastRoleIdx + 1) % agentRoles.length;
-        const nextRole = agentRoles[nextRoleIdx];
+        const lastRole = agentRoles[lastRoleIdx];
+        const currentRoleIdx = (lastRoleIdx + 1) % agentRoles.length;
+        const currentRole = agentRoles[currentRoleIdx];
 
-        console.log("Next role idx: ", nextRoleIdx);
-        console.log("Next role: ", nextRole);
-        const nextMessage = await generateAgentResponse({
+        const chatHistory = currentDiscussion.map(msg => ({
+          role: msg.agentRole,
+          response: msg.message,
+        }));
+
+        const currentMessage = await generateAgentResponse({
           topic,
-          role: nextRole,
-          history: currentDiscussion.map(msg => ({
-            role: msg.agentRole,
-            response: msg.message,
-          }))
+          role: currentRole,
+          history: chatHistory
         });
 
-        console.log("Next message is: %s", nextMessage.response);
+        console.log("History: ", chatHistory);
+        console.log("Last roles idx: %d, last role: %s, current role idx: %d, current role: %s", lastRoleIdx, lastRole, currentRoleIdx, currentRole);
+        console.log("Current message: ", currentMessage.response)
+        
+        lastRoleIdx = currentRoleIdx;
+
         // Handle agent skipping turn
-        if (nextMessage.response.trim() === 'SKIP') {
+        if (currentMessage.response.trim() === 'SKIP') {
           continue;
         }
 
         // If moderator says CONCLUDE, end discussion
-        if ((nextRole.toLowerCase() === 'moderator' && nextMessage.response.trim() === 'CONCLUDE') || (currentDiscussion.length >= maxTurns + 1)) {
+        if ((currentRole.toLowerCase() === 'moderator' && currentMessage.response.trim() === 'CONCLUDE') || (currentDiscussion.length >= maxTurns + 1)) {
           const concludingModeratorMessage: DiscussionMessage = {
             agentRole: 'Moderator',
             message: "Thank you all for your contributions. I will now summarize the key points and conclusion.",
@@ -196,12 +197,12 @@ export default function Home() {
           break;
         }
 
-        const nextDiscussion: DiscussionMessage = {
-          agentRole: nextRole,
-          message: nextMessage.response,
+        const newMessagedToBeAdded: DiscussionMessage = {
+          agentRole: currentRole,
+          message: currentRole.toLowerCase() === "moderator" ? "Moderator checked, discussion should continue" : currentMessage.response,
           timestamp: new Date(),
         };
-        currentDiscussion.push(nextDiscussion)
+        currentDiscussion.push(newMessagedToBeAdded)
         setDiscussion([...currentDiscussion]);
       } catch (error) {
         console.error("Error during discussion step:", error);
