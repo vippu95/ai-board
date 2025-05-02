@@ -35,7 +35,7 @@ const prompt = ai.definePrompt({
   - {{this.role}}: {{this.response}}
   {{/each}}
 
-  Based on your role, the topic, and the history, provide your next contribution to the discussion. Keep your response concise and relevant.`,
+  Based on your role, the topic, and the history, provide your next contribution to the discussion. Keep your response relevant.`,
 });
 
 // Define the Genkit flow

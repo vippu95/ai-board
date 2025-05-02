@@ -52,7 +52,7 @@ const prompt = ai.definePrompt({
         .describe('A summarized conclusion of the AI board meeting.'),
     }),
   },
-  prompt: `You are an AI expert specializing in creating meeting summaries.\n\n  Given the following transcript of an AI board meeting, create a summarized conclusion of the meeting.\n  Transcript: {{{transcript}}}`,
+  prompt: `You are an AI expert specializing in creating meeting summaries.\n\n  Given the following transcript of an AI board meeting, create a summarized conclusion of the meeting. Cover all important points discussed in the meeting. \n  Transcript: {{{transcript}}}`,
 });
 
 const summarizeMeetingConclusionFlow = ai.defineFlow<
