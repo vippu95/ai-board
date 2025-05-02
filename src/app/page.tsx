@@ -83,16 +83,17 @@ export default function Home() {
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
 
    React.useEffect(() => {
-    // Scroll to bottom when discussion updates
+    // Scroll to bottom when discussion updates or conclusion is added
     if (scrollAreaRef.current) {
-      // The ShadCN ScrollArea component nests the scrollable viewport.
-      // We need to query for the viewport element within the ref.
       const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (scrollElement) {
-        scrollElement.scrollTop = scrollElement.scrollHeight;
+        // Use setTimeout to allow the DOM to update before scrolling
+        setTimeout(() => {
+          scrollElement.scrollTop = scrollElement.scrollHeight;
+        }, 0);
       }
     }
-  }, [discussion]);
+  }, [discussion, conclusion, appState]); // Add conclusion and appState dependencies
 
 
   const handleTopicSubmit = async (e: React.FormEvent) => {
@@ -166,6 +167,7 @@ export default function Home() {
     setIsLoading(true);
     setAppState('discussing');
     setDiscussion([]); // Start fresh discussion
+    setConclusion(''); // Clear conclusion
 
     let currentDiscussion: DiscussionMessage[] = [];
     let continueDiscussion = true;
@@ -213,17 +215,20 @@ export default function Home() {
     }
 
     setAppState('concluding');
+    // No longer set loading false here, it will be set in generateConclusion
     await generateConclusion(currentDiscussion);
-    setIsLoading(false);
+    // setIsLoading(false); // Moved to generateConclusion finally block
   };
 
   const generateConclusion = async (finalDiscussion: DiscussionMessage[]) => {
-     setIsLoading(true);
+     // setIsLoading is already true from startDiscussion or if called separately
+     setIsLoading(true); // Ensure loading is true
      try {
         const transcript = finalDiscussion.map(msg => `${msg.agentRole}: ${msg.message}`).join('\n\n');
         const input: SummarizeMeetingConclusionInput = { transcript };
         const result: SummarizeMeetingConclusionOutput = await summarizeMeetingConclusion(input);
         setConclusion(result.conclusion);
+        setAppState('finished'); // Move state change here
      } catch (error) {
         console.error("Error generating conclusion:", error);
         setConclusion("Error generating conclusion.");
@@ -232,9 +237,10 @@ export default function Home() {
             description: "Failed to generate the meeting conclusion.",
             variant: "destructive",
         });
+        setAppState('finished'); // Also set finished on error
      } finally {
         setIsLoading(false);
-        setAppState('finished');
+        // setAppState('finished'); // Moved to try/catch blocks
      }
   }
 
@@ -243,6 +249,17 @@ export default function Home() {
      if (normalizedRole === 'moderator') return Sparkles;
      const agent = agents.find(a => a.role.toLowerCase() === normalizedRole);
      return agent?.icon || roleIcons.default;
+  }
+
+  const resetApp = () => {
+      setAppState('idle');
+      setTopic('');
+      setAgents([]);
+      setDiscussion([]);
+      setConclusion('');
+      setEditingRoles(false);
+      setEditedRoles([]);
+      setIsLoading(false); // Ensure loading is reset
   }
 
   return (
@@ -254,11 +271,11 @@ export default function Home() {
 
       <div className="flex flex-1 gap-4 overflow-hidden">
 
-        {/* Left Panel: Setup & Conclusion */}
+        {/* Left Panel: Setup */}
         <div className="w-1/3 flex flex-col gap-4 overflow-hidden"> {/* Added overflow-hidden */}
           <Card className="flex-shrink-0">
             <CardHeader>
-              <CardTitle>1. Start a New Discussion</CardTitle>
+              <CardTitle>1. Start Discussion</CardTitle>
               <CardDescription>Enter the topic you want the AI agents to discuss.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -270,20 +287,27 @@ export default function Home() {
                     placeholder="e.g., The future of renewable energy"
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
-                    disabled={isLoading && appState !== 'idle'}
+                    disabled={isLoading || appState !== 'idle'}
                   />
                 </div>
               </form>
             </CardContent>
             <CardFooter>
-              <Button onClick={handleTopicSubmit} disabled={!topic || (isLoading && appState !== 'idle')} className="w-full">
-                {isLoading && appState === 'planning' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {appState === 'idle' || appState === 'finished' ? 'Define Agent Roles' : 'Generating Roles...'}
-              </Button>
+               {appState === 'idle' || appState === 'finished' ? (
+                 <Button onClick={appState === 'finished' ? resetApp : handleTopicSubmit} disabled={!topic && appState === 'idle'} className="w-full">
+                    {appState === 'finished' ? 'Start New Topic' : 'Define Agent Roles'}
+                 </Button>
+               ) : (
+                 <Button disabled={true} className="w-full">
+                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                   Generating Roles...
+                 </Button>
+               )}
             </CardFooter>
           </Card>
 
-          {appState !== 'idle' && agents.length > 0 && (
+          {/* Discussion Plan Card - Shown only during 'planning' state and onwards until reset */}
+          {(appState === 'planning' || appState === 'discussing' || appState === 'concluding' || appState === 'finished') && agents.length > 0 && (
              <Card className="flex-shrink-0 flex flex-col overflow-hidden"> {/* Added flex flex-col overflow-hidden */}
                 <CardHeader>
                     <div className="flex justify-between items-center">
@@ -294,7 +318,9 @@ export default function Home() {
                             </Button>
                         )}
                     </div>
-                    <CardDescription>The moderator proposed these roles. You can edit them before starting.</CardDescription>
+                    <CardDescription>
+                       {appState === 'planning' ? 'The moderator proposed these roles. You can edit them before starting.' : 'The participating agent roles.'}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-hidden p-0"> {/* Added flex-1 overflow-hidden p-0 */}
                    <ScrollArea className="h-full max-h-[250px] p-6"> {/* Added ScrollArea with max-height */}
@@ -306,7 +332,7 @@ export default function Home() {
                                         value={role}
                                         onChange={(e) => handleRoleChange(index, e.target.value)}
                                         className="flex-grow"
-                                        disabled={isLoading}
+                                        disabled={isLoading || appState !== 'planning'}
                                     />
                                     {/* Potential: Add remove button */}
                                 </div>
@@ -332,72 +358,57 @@ export default function Home() {
                     </div> {/* Close wrapper div */}
                    </ScrollArea> {/* Close ScrollArea */}
                 </CardContent>
-                 {!editingRoles && appState === 'planning' && (
+                 {/* Show Start/Running/Finished Button */}
+                 {appState === 'planning' && !editingRoles && (
                     <CardFooter>
                         <Button onClick={startDiscussion} disabled={isLoading || agents.length === 0} className="w-full">
-                            {isLoading && appState === 'discussing' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Start Board Meeting
                         </Button>
                     </CardFooter>
                  )}
+                 {(appState === 'discussing' || appState === 'concluding') && (
+                    <CardFooter>
+                        <Button disabled={true} className="w-full">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            {appState === 'discussing' ? 'Discussion in Progress...' : 'Generating Conclusion...'}
+                        </Button>
+                    </CardFooter>
+                 )}
+                 {appState === 'finished' && (
+                     <CardFooter>
+                         <Button variant="outline" onClick={resetApp} className="w-full">
+                             Start New Topic
+                         </Button>
+                     </CardFooter>
+                 )}
              </Card>
           )}
 
-          {(appState === 'concluding' || appState === 'finished') && (
-            <Card className="flex-1 flex flex-col overflow-hidden"> {/* Ensure conclusion card also handles overflow */}
-              <CardHeader>
-                <CardTitle>3. Meeting Conclusion</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-auto p-0"> {/* Use overflow-auto directly or wrap with ScrollArea */}
-                <ScrollArea className="h-full p-6">
-                    {isLoading && appState === 'concluding' ? (
-                    <div className="flex items-center justify-center h-full">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                            <span className="ml-2">Generating conclusion...</span>
-                        </div>
-                    ) : (
-                        conclusion ? (
-                            <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert">{conclusion}</ReactMarkdown>
-                        ) : (
-                            <p className="text-muted-foreground">The conclusion will appear here.</p>
-                        )
-                    )}
-                </ScrollArea>
-              </CardContent>
-               {appState === 'finished' && (
-                    <CardFooter>
-                        <Button variant="outline" onClick={() => {
-                            setAppState('idle');
-                            setTopic('');
-                            setAgents([]);
-                            setDiscussion([]);
-                            setConclusion('');
-                        }} className="w-full">
-                            Start New Topic
-                        </Button>
-                    </CardFooter>
-                )}
-            </Card>
-          )}
+          {/* Removed the separate Conclusion Card */}
 
         </div>
 
-        {/* Right Panel: Discussion */}
+        {/* Right Panel: Discussion & Conclusion */}
         <Card className="flex-1 flex flex-col overflow-hidden">
           <CardHeader>
-            <CardTitle>Live Discussion</CardTitle>
-            <CardDescription>Watch the AI agents discuss the topic in real-time.</CardDescription>
+            <CardTitle>Live Discussion & Conclusion</CardTitle>
+            <CardDescription>
+                {appState === 'idle' && 'Start a topic to see the discussion.'}
+                {appState === 'planning' && 'Review roles and start the meeting.'}
+                {(appState === 'discussing' || appState === 'concluding') && 'Watch the AI agents discuss the topic in real-time.'}
+                {appState === 'finished' && 'The meeting discussion and conclusion.'}
+            </CardDescription>
           </CardHeader>
           {/* The ref is now correctly on the CardContent which contains the ScrollArea */}
           <CardContent ref={scrollAreaRef} className="flex-1 overflow-hidden p-0">
               {/* ScrollArea now correctly takes the full height of its parent (CardContent) */}
               <ScrollArea className="h-full p-6">
-                {discussion.length === 0 && appState !== 'discussing' && appState !== 'concluding' && (
+                {discussion.length === 0 && !conclusion && appState !== 'discussing' && appState !== 'concluding' && (
                     <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
                         <Bot size={48} className="mb-4"/>
-                        <p>The discussion will appear here once started.</p>
-                        {appState === 'planning' && <p className="mt-2 text-sm">Review the agent roles and click "Start Board Meeting".</p>}
-                        {appState === 'idle' && <p className="mt-2 text-sm">Enter a topic and click "Define Agent Roles" to begin.</p>}
+                        {appState === 'idle' && <p>Enter a topic and click "Define Agent Roles" to begin.</p>}
+                        {appState === 'planning' && <p>Review the agent roles and click "Start Board Meeting".</p>}
+                        {appState !== 'idle' && appState !== 'planning' && <p>The discussion will appear here once started.</p>}
                     </div>
                 )}
                 <div className="space-y-4">
@@ -407,11 +418,12 @@ export default function Home() {
                         const bgColor = msg.agentRole === 'Moderator' ? 'bg-primary/10' : 'bg-secondary';
                         const borderColor = msg.agentRole === 'Moderator' ? 'border-primary/30' : 'border-border';
                         const textColor = msg.agentRole === 'Moderator' ? 'text-primary' : 'text-foreground';
+                        // Highlight only the very last message during discussion phase
                         const isHighlighted = appState === 'discussing' && index === discussion.length - 1;
 
                         return (
                             <div
-                            key={index}
+                            key={`msg-${index}`}
                             className={`flex gap-3 p-3 rounded-lg border ${bgColor} ${borderColor} ${isHighlighted ? 'ring-2 ring-accent' : ''}`}
                             >
                             <Icon className={`h-6 w-6 mt-1 flex-shrink-0 ${textColor}`} />
@@ -427,16 +439,45 @@ export default function Home() {
                             </div>
                         );
                     })}
+
+                    {/* Loading indicator during discussion or conclusion generation */}
                     {isLoading && (appState === 'discussing' || appState === 'concluding') && (
                          <div className="flex items-center text-muted-foreground justify-center p-4">
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             <span>{appState === 'discussing' ? 'Agent thinking...' : 'Generating conclusion...'}</span>
                         </div>
                     )}
+
+                    {/* Display Conclusion */}
+                    {appState === 'finished' && conclusion && (
+                        <div className="mt-6 pt-4 border-t border-dashed">
+                             <h3 className="text-lg font-semibold mb-2 text-primary flex items-center gap-2">
+                                <Sparkles className="h-5 w-5" /> Meeting Conclusion
+                             </h3>
+                             <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert bg-card p-4 rounded-md border">
+                                {conclusion}
+                             </ReactMarkdown>
+                        </div>
+                    )}
+                     {appState === 'finished' && !conclusion && (
+                        <div className="mt-6 pt-4 border-t border-dashed text-center text-destructive">
+                            Failed to generate conclusion.
+                        </div>
+                     )}
                 </div>
 
               </ScrollArea>
           </CardContent>
+            {/* Footer with reset button only needed if discussion panel is the only place to restart */}
+           {/*
+            {appState === 'finished' && (
+                <CardFooter className="border-t pt-4">
+                     <Button variant="outline" onClick={resetApp} className="w-full">
+                         Start New Topic
+                     </Button>
+                </CardFooter>
+            )}
+           */}
         </Card>
 
       </div>
