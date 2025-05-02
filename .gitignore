@@ -39,3 +39,5 @@ next-env.d.ts
 
 .genkit/*
 .env*
+/.idx
+/docs/*
