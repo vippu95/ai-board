@@ -196,16 +196,13 @@ export default function Home() {
           break;
         }
 
-        // Moderator will only check if the discussion can be concluded. It won't participate in the discussion
-        if(nextRole.toLowerCase() === 'moderator') {
-            const nextDiscussion: DiscussionMessage = {
-              agentRole: nextRole,
-              message: nextMessage.response,
-              timestamp: new Date(),
-            };
-            currentDiscussion.push(nextDiscussion)
-            setDiscussion([...currentDiscussion]);
-        }
+        const nextDiscussion: DiscussionMessage = {
+          agentRole: nextRole,
+          message: nextMessage.response,
+          timestamp: new Date(),
+        };
+        currentDiscussion.push(nextDiscussion)
+        setDiscussion([...currentDiscussion]);
       } catch (error) {
         console.error("Error during discussion step:", error);
         toast({
