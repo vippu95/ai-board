@@ -171,7 +171,7 @@ export default function Home() {
 
     let currentDiscussion: DiscussionMessage[] = [];
     let continueDiscussion = true;
-    const maxTurns = agents.length * 4; // Limit discussion length for now
+    const maxTurns = 10; // Limit discussion length for now
 
     // Initial Moderator message
     const moderatorMessage: DiscussionMessage = {
@@ -191,7 +191,7 @@ export default function Home() {
         setDiscussion([...currentDiscussion]);
 
         // Simple condition to stop discussion (replace with GenAI decision later)
-        if (currentDiscussion.length >= maxTurns + 1 || (Math.random() > 0.8 && currentDiscussion.length > agents.length * 2 + 1)) {
+        if (currentDiscussion.length >= maxTurns + 1) {
             continueDiscussion = false;
             // Add moderator concluding message
             const concludingModeratorMessage: DiscussionMessage = {
