@@ -1,1 +1,2 @@
-// Flows will be imported for their side effects in this file.
+import '@/ai/flows/summarize-meeting-conclusion.ts';
+import '@/ai/flows/determine-agent-roles.ts';
