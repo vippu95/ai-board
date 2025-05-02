@@ -143,7 +143,7 @@ export default function Home() {
 
     let currentDiscussion: DiscussionMessage[] = [];
     let continueDiscussion = true;
-    const maxTurns = 10; // Limit discussion length for now
+    const maxTurns = 50; // Limit discussion length for now
 
     // Initial Moderator message
     const moderatorMessage: DiscussionMessage = {
