@@ -29,40 +29,11 @@ type DiscussionMessage = {
 
 type AppState = 'idle' | 'planning' | 'discussing' | 'concluding' | 'finished';
 
-// Simulate a discussion step - replace with actual GenAI flow later
-const simulateDiscussionStep = async (topic: string, roles: string[], history: DiscussionMessage[]): Promise<DiscussionMessage> => {
-  await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000)); // Simulate AI thinking time
-
-  const lastSpeakerIndex = roles.indexOf(history[history.length - 1]?.agentRole ?? '');
-  const nextSpeakerIndex = (lastSpeakerIndex + 1) % roles.length;
-  const nextSpeakerRole = roles[nextSpeakerIndex];
-
-  // Simple simulated response based on role and topic
-  let message = `As the ${nextSpeakerRole}, regarding "${topic}", I believe... `;
-  if (history.length < roles.length * 2) { // Let each agent speak twice initially
-      message += `we should consider [simulated argument related to ${nextSpeakerRole}].`;
-  } else {
-      message += ` based on the previous points, my conclusion is [simulated final thought related to ${nextSpeakerRole}].`;
-      // Potentially signal end of discussion
-      if (Math.random() > 0.7 && history.length > roles.length * 3) {
-          // Signal end, will be handled in main logic
-      }
-  }
-
-
-  return {
-    agentRole: nextSpeakerRole,
-    message: message,
-    timestamp: new Date(),
-  };
-};
-
 // Basic mapping, could be expanded
 const roleIcons: { [key: string]: React.ComponentType<{ className?: string }> } = {
     default: Bot, // Default icon
     moderator: Sparkles,
     user: User,
-    // Add more specific role icons if needed
     analyst: Bot,
     strategist: Bot,
     critic: Bot,
@@ -177,7 +148,7 @@ export default function Home() {
     // Initial Moderator message
     const moderatorMessage: DiscussionMessage = {
       agentRole: 'Moderator',
-      message: `Let's begin the discussion on "${topic}". We have the following roles participating: ${agents.map(a => a.role).join(', ')}. I'll now ask each agent for their initial thoughts.`,
+      message: `Let's begin the discussion on "${topic}". We have the following roles participating: ${agents.map(a => a.role).join(', ')}. I'll now ask each role for their initial thoughts.`,
       timestamp: new Date(),
     };
     currentDiscussion.push(moderatorMessage);
@@ -187,8 +158,29 @@ export default function Home() {
     while (continueDiscussion && currentDiscussion.length < maxTurns + 1) { // +1 for moderator start
       try {
         const agentRoles = agents.map(a => a.role);
-        const nextMessage = await simulateDiscussionStep(topic, agentRoles, currentDiscussion);
-        currentDiscussion.push(nextMessage);
+
+        const lastRole = currentDiscussion[currentDiscussion.length - 1].agentRole
+        const lastRoleIdx = agentRoles.indexOf(lastRole);
+        const lastMessage = currentDiscussion[currentDiscussion.length - 1];
+      
+        const nextRoleIdx = (lastRoleIdx + 1) % agentRoles.length;
+        const nextRole = agentRoles[nextRoleIdx];
+      
+        const nextMessage = await generateAgentResponse({
+          topic,
+          role: nextRole,
+          history: currentDiscussion.map(msg => ({
+            role: msg.agentRole,
+            response: msg.message,
+          }))
+        });
+
+        const nextDiscussion: DiscussionMessage = {
+          agentRole: nextRole,
+          message: nextMessage.response,
+          timestamp: new Date(),
+        };
+        currentDiscussion.push(nextDiscussion);
         setDiscussion([...currentDiscussion]);
 
         // Simple condition to stop discussion (replace with GenAI decision later)
@@ -210,6 +202,7 @@ export default function Home() {
             title: "Discussion Error",
             description: "An error occurred during the discussion.",
             variant: "destructive",
+
         });
         continueDiscussion = false; // Stop on error
       }
@@ -485,3 +478,4 @@ export default function Home() {
     </div>
   );
 }
+
