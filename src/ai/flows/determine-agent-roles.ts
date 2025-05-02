@@ -33,7 +33,7 @@ const prompt = ai.definePrompt({
   output: {
     schema: z.array(z.string().describe('The roles of the AI agents.')),
   },
-  prompt: `You are a moderator for a board meeting. Your task is to determine the roles of AI agents required for an effective discussion on the following topic: {{{topic}}}. Please provide a list of roles that would contribute to a balanced and thorough discussion. The roles should be distinct and cover different aspects of the topic. Return the list of roles.`,
+  prompt: `You are a moderator for a board meeting. Your task is to determine the roles of AI agents required for an effective discussion on the following topic: {{{topic}}}. Please provide a list of roles that would contribute to a balanced and thorough discussion. The roles should be distinct and cover different aspects of the topic. There should be a maximum of 5 participants. Return the list of roles.`,
 });
 
 const determineAgentRolesFlow = ai.defineFlow<
